@@ -21,7 +21,9 @@ that timing source becomes stale.
 - Standard 48-byte NTP v3/v4 server responses on UDP port 123
 - Safe LI=3 / Stratum 16 responses whenever the clock is not synchronized
 - Lightweight HTTP status page on TCP port 80
-- mDNS hostname `clock.local` with HTTP and NTP service discovery
+- NVS-backed mDNS hostname, defaulting to `clock.local`, with HTTP and NTP
+  service discovery
+- Dark-themed advanced page for hostname changes and explicit restart
 - SSD1306-compatible 128x64 status display
 - Host-side unit tests for clock interpolation and NTP fractional conversion
 - No Wi-Fi dependency or fallback
@@ -282,6 +284,7 @@ The page reports:
 - the last successful NTP transmit timestamp, its synchronization state, and
   the disciplined receive-to-transmit timestamp delta
 - Ethernet IPv4 address
+- active mDNS hostname
 - device uptime
 
 Status collection and HTML rendering are separate modules. The model takes
@@ -289,6 +292,26 @@ short read-only snapshots and releases subsystem locks before HTTP formatting
 or socket writes. The HTTP server never runs in the PPS ISR and does not
 participate in NTP packet timestamp generation. Failure to start the status
 server is logged but does not stop GPS, PPS, Ethernet, NTP, or OLED operation.
+
+### Advanced Settings
+
+Open [`http://clock.local/advanced`](http://clock.local/advanced) or select
+**Advanced settings** at the bottom of the status page. The advanced page is
+deliberately limited to changing the device hostname and explicitly restarting
+the appliance. The main status page remains read-only.
+
+The hostname is stored in the `gps_ntp` NVS namespace and persists across
+reboots and power loss. The factory default is `clock`. Hostnames may contain
+1–63 ASCII letters, digits, and hyphens, may not begin or end with a hyphen,
+and are normalized to lowercase before saving. Spaces, underscores, periods,
+slashes, and names ending in `.local` are rejected.
+
+Saving does not change the running mDNS service or restart the appliance.
+Select **Restart now** to activate the saved hostname. For example, saving
+`office-clock` and restarting changes the browser URL to
+`http://office-clock.local/`. If mDNS is unavailable, both the status and
+advanced pages remain accessible through the DHCP-assigned address, such as
+`http://DEVICE_IP/advanced`.
 
 ## Synchronization States
 
@@ -419,12 +442,13 @@ reference clock; they are validation examples, not guaranteed specifications.
 │   ├── CMakeLists.txt            Application component definition
 │   ├── idf_component.yml         W5500 managed-component requirement
 │   ├── main.c                    Application entry point
+│   ├── app_config.c/.h            NVS hostname configuration and validation
 │   ├── clock_discipline.c/.h     PPS/RMC discipline and state snapshots
 │   ├── clock_math.c/.h           Portable integer timing math
 │   ├── ethernet_w5500.c/.h       W5500, DHCP, and network state
 │   ├── gps_receiver.c/.h         GPS UART parsing and PPS capture
 │   ├── http_status_server.c/.h    TCP/80 HTTP presentation
-│   ├── mdns_discovery.c/.h        clock.local and service advertisements
+│   ├── mdns_discovery.c/.h        Configured hostname/service advertisements
 │   ├── ntp_server.c/.h           UDP/123 NTP server
 │   ├── oled_display.c/.h          SSD1306 display task and renderer
 │   └── status_model.c/.h          Read-only appliance status aggregation

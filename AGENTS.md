@@ -133,6 +133,7 @@ diagnostics.
 ## Module Boundaries
 
 - `main/main.c`: application startup and high-level initialization
+- `main/app_config.*`: NVS-backed appliance configuration and validation
 - `main/gps_receiver.*`: UART/NMEA reception and PPS capture
 - `main/clock_discipline.*`: PPS/RMC association, state machine, clock snapshot
   API, and UTC discipline

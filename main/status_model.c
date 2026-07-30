@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "app_config.h"
 #include "ethernet_w5500.h"
 #include "esp_timer.h"
 #include "ntp_server.h"
@@ -50,5 +51,7 @@ status_model_snapshot_t status_model_snapshot(void)
     };
 
     memcpy(status.ipv4, ethernet.ipv4, sizeof(status.ipv4));
+    strlcpy(status.hostname, app_config_active_hostname(),
+            sizeof(status.hostname));
     return status;
 }

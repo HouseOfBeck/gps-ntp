@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "app_config.h"
 #include "clock_discipline.h"
 
 typedef struct {
@@ -29,6 +30,7 @@ typedef struct {
     bool ethernet_link_up;
     bool has_ipv4;
     char ipv4[16];
+    char hostname[APP_CONFIG_HOSTNAME_BUFFER_SIZE];
 
     int64_t uptime_us;
 } status_model_snapshot_t;

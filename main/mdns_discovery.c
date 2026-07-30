@@ -5,7 +5,6 @@
 #include "esp_log.h"
 #include "mdns.h"
 
-#define MDNS_HOSTNAME "clock"
 #define MDNS_INSTANCE_NAME "GPS-Disciplined NTP Server"
 #define HTTP_PORT 80
 #define NTP_PORT 123
@@ -23,14 +22,19 @@ static esp_err_t initialization_failed(const char *step, esp_err_t err,
     return err;
 }
 
-esp_err_t mdns_discovery_start(void)
+esp_err_t mdns_discovery_start(const char *hostname)
 {
+    if (hostname == NULL || hostname[0] == '\0') {
+        ESP_LOGW(TAG, "Initialization failed: hostname is empty");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     esp_err_t err = mdns_init();
     if (err != ESP_OK) {
         return initialization_failed("mdns_init", err, false);
     }
 
-    err = mdns_hostname_set(MDNS_HOSTNAME);
+    err = mdns_hostname_set(hostname);
     if (err != ESP_OK) {
         return initialization_failed("hostname", err, true);
     }
@@ -51,8 +55,8 @@ esp_err_t mdns_discovery_start(void)
     }
 
     ESP_LOGI(TAG,
-             "Initialized clock.local as \"%s\"; services: "
+             "Initialized %s.local as \"%s\"; services: "
              "_http._tcp:%d, _ntp._udp:%d",
-             MDNS_INSTANCE_NAME, HTTP_PORT, NTP_PORT);
+             hostname, MDNS_INSTANCE_NAME, HTTP_PORT, NTP_PORT);
     return ESP_OK;
 }
