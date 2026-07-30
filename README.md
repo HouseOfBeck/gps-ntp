@@ -20,6 +20,8 @@ that timing source becomes stale.
 - W5500 Ethernet with DHCP and an ESP32-derived Ethernet MAC address
 - Standard 48-byte NTP v3/v4 server responses on UDP port 123
 - Safe LI=3 / Stratum 16 responses whenever the clock is not synchronized
+- Lightweight HTTP status page on TCP port 80
+- mDNS hostname `clock.local` with HTTP and NTP service discovery
 - SSD1306-compatible 128x64 status display
 - Host-side unit tests for clock interpolation and NTP fractional conversion
 - No Wi-Fi dependency or fallback
@@ -34,8 +36,8 @@ that timing source becomes stale.
                                 │                    └──> OLED status
                                 │
  W5500 Ethernet ──> DHCP/lwIP ──┴──> UDP/123 NTP server
-          │
-          └──> read-only network snapshot ──> OLED status
+          ├──> HTTP status model/presentation
+          └──> network snapshot ──> OLED and HTTP status
 ```
 
 The PPS ISR only captures monotonic timing information. GPS parsing, clock
@@ -133,10 +135,11 @@ Managed component dependencies are resolved by ESP-IDF:
 | --- | ---: |
 | `espressif/w5500` | 2.0.0 |
 | `espressif/wiznet_common` | 1.0.0 |
+| `espressif/mdns` | 1.11.3 |
 
-The W5500 requirement is declared in `main/idf_component.yml`; exact resolved
-versions are recorded in `dependencies.lock`. The OLED driver is implemented
-in-tree and adds no external display dependency.
+The W5500 and mDNS requirements are declared in `main/idf_component.yml`;
+exact resolved versions are recorded in `dependencies.lock`. The OLED driver
+is implemented in-tree and adds no external display dependency.
 
 ## Build Setup
 
@@ -248,6 +251,44 @@ field using integer arithmetic.
 When the clock is not synchronized, the server replies with leap indicator 3
 (alarm condition), Stratum 16, and a non-GPS reference identifier. It does not
 silently continue serving apparent Stratum-1 time.
+
+## HTTP Status Page
+
+Once DHCP has assigned an address, open
+[`http://clock.local/`](http://clock.local/) from another host on the same
+LAN. The lightweight page is served by ESP-IDF's HTTP server component on TCP
+port 80. It defaults to refreshing every 15 seconds.
+
+The appliance advertises the instance `GPS-Disciplined NTP Server` as
+`_http._tcp` on port 80 and `_ntp._udp` on port 123. If the client or LAN does
+not support mDNS, use `http://DEVICE_IP/` with the DHCP-assigned address shown
+on the OLED or serial log.
+
+The page's Auto-refresh control supports Off, 2, 5, 15, 30, and 60 seconds.
+The selection takes effect without an immediate reload and is saved in browser
+localStorage, so each browser can keep its own preference. Invalid or missing
+saved values fall back to 15 seconds. Refresh timing is entirely client-side;
+the firmware exposes no configuration endpoint and stores no refresh setting
+in NVS.
+
+The page reports:
+
+- GPS synchronization state
+- PPS count and most recent PPS interval
+- clock frequency correction
+- clock phase error, shown as unavailable until the discipline model exposes
+  an independent phase-error estimate
+- valid NTP request count and successfully transmitted response count
+- the last successful NTP transmit timestamp, its synchronization state, and
+  the disciplined receive-to-transmit timestamp delta
+- Ethernet IPv4 address
+- device uptime
+
+Status collection and HTML rendering are separate modules. The model takes
+short read-only snapshots and releases subsystem locks before HTTP formatting
+or socket writes. The HTTP server never runs in the PPS ISR and does not
+participate in NTP packet timestamp generation. Failure to start the status
+server is logged but does not stop GPS, PPS, Ethernet, NTP, or OLED operation.
 
 ## Synchronization States
 
@@ -365,7 +406,7 @@ reference clock; they are validation examples, not guaranteed specifications.
 - The OLED driver targets the SSD1306-compatible controller behavior used by
   the tested 128x64 display.
 - The reserved microSD interface is not implemented.
-- There is no Wi-Fi fallback, web status page, or persistent NTP statistics.
+- There is no Wi-Fi fallback or persistent NTP statistics across reboots.
 
 ## Repository Structure
 
@@ -382,8 +423,11 @@ reference clock; they are validation examples, not guaranteed specifications.
 │   ├── clock_math.c/.h           Portable integer timing math
 │   ├── ethernet_w5500.c/.h       W5500, DHCP, and network state
 │   ├── gps_receiver.c/.h         GPS UART parsing and PPS capture
+│   ├── http_status_server.c/.h    TCP/80 HTTP presentation
+│   ├── mdns_discovery.c/.h        clock.local and service advertisements
 │   ├── ntp_server.c/.h           UDP/123 NTP server
-│   └── oled_display.c/.h         SSD1306 display task and renderer
+│   ├── oled_display.c/.h          SSD1306 display task and renderer
+│   └── status_model.c/.h          Read-only appliance status aggregation
 ├── sdkconfig                     ESP32-S3 project configuration
 └── tests/
     ├── clock_math_test.c         Host-side timing math tests

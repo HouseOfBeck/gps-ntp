@@ -1,0 +1,5 @@
+cd ~/src/gps-ntp
+source ~/.espressif/tools/activate_idf_v6.0.2.sh
+./tests/run_clock_math_test.sh
+idf.py build
+idf.py -p /dev/cu.usbmodem101 flash monitor

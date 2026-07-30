@@ -31,6 +31,7 @@ typedef struct {
     int64_t last_pps_age_us;
     int64_t last_pps_interval_us;
     int64_t esp_us_per_second_x1000;
+    bool rate_valid;
     uint32_t pps_count;
 } clock_snapshot_t;
 
@@ -40,4 +41,3 @@ void clock_discipline_report_invalid_rmc(void);
 clock_snapshot_t clock_discipline_snapshot(void);
 clock_state_t clock_discipline_state(void);
 const char *clock_state_name(clock_state_t state);
-

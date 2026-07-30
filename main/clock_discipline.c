@@ -170,6 +170,7 @@ clock_snapshot_t clock_discipline_snapshot(void)
     snapshot.reference_unix_sec = s_anchor_utc_sec;
     snapshot.reference_esp_us = s_anchor_esp_us;
     snapshot.last_pps_interval_us = s_pps_delta_us;
+    snapshot.rate_valid = s_rate_sample_count >= 2;
     snapshot.pps_count = s_pps_count;
     snapshot.last_pps_age_us = s_pps_timestamp_us == 0
                                    ? INT64_MAX

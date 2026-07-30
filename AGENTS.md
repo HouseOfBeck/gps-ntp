@@ -123,6 +123,8 @@ diagnostics.
 - OLED operation is non-critical. Initialization or update failures must never
   interfere with GPS, PPS, Ethernet, or NTP.
 - Keep OLED traffic outside the NTP timing path and update it at a modest rate.
+- Keep HTTP status collection and rendering outside the PPS ISR and NTP packet
+  timing path. HTTP failure must not stop the timing services.
 - Preserve useful serial diagnostics, but avoid high-rate logging that can
   disturb timing.
 - Check ESP-IDF, socket, and peripheral errors. Degrade safely when a
@@ -138,6 +140,9 @@ diagnostics.
 - `main/ethernet_w5500.*`: W5500, Ethernet events, DHCP, MAC, and network
   snapshots
 - `main/ntp_server.*`: UDP/123 request validation and NTP responses
+- `main/status_model.*`: read-only clock, NTP, network, and uptime aggregation
+- `main/http_status_server.*`: non-critical TCP/80 HTTP presentation
+- `main/mdns_discovery.*`: non-critical Ethernet hostname and service discovery
 - `main/oled_display.*`: non-critical SSD1306 display task and rendering
 - `tests/clock_math_test.c`: host-side clock math tests
 
@@ -173,4 +178,3 @@ At minimum preserve coverage for:
 - Add dependencies through `main/idf_component.yml` and document them.
 - Update `README.md` when hardware, pin assignments, dependencies, behavior, or
   validation procedures change.
-

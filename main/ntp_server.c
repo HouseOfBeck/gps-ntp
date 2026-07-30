@@ -25,6 +25,8 @@
 #define NTP_STRATUM_UNSYNC 16
 
 static const char *TAG = "ntp";
+static portMUX_TYPE s_status_lock = portMUX_INITIALIZER_UNLOCKED;
+static ntp_server_status_t s_status;
 
 static void put_u32(uint8_t *destination, uint32_t value)
 {
@@ -48,9 +50,10 @@ static void put_timestamp(uint8_t *destination, int64_t unix_us)
     put_u32(destination + 4, fraction);
 }
 
-static void build_response(uint8_t response[NTP_PACKET_SIZE],
-                           const uint8_t request[NTP_PACKET_SIZE],
-                           const clock_snapshot_t *receive_clock)
+static clock_snapshot_t build_response(
+    uint8_t response[NTP_PACKET_SIZE],
+    const uint8_t request[NTP_PACKET_SIZE],
+    const clock_snapshot_t *receive_clock)
 {
     memset(response, 0, NTP_PACKET_SIZE);
 
@@ -88,6 +91,37 @@ static void build_response(uint8_t response[NTP_PACKET_SIZE],
     if (transmit_clock.time_valid) {
         put_timestamp(response + 40, transmit_clock.unix_us);
     }
+
+    return transmit_clock;
+}
+
+static void record_request_result(
+    const clock_snapshot_t *receive_clock,
+    const clock_snapshot_t *transmit_clock,
+    bool response_sent)
+{
+    portENTER_CRITICAL(&s_status_lock);
+    s_status.request_count++;
+    if (response_sent) {
+        s_status.response_count++;
+        s_status.last_receive_valid = receive_clock->time_valid;
+        s_status.last_transmit_valid = transmit_clock->time_valid;
+        s_status.last_transmit_synchronized =
+            transmit_clock->synchronized;
+        s_status.last_receive_to_transmit_valid =
+            receive_clock->time_valid && transmit_clock->time_valid;
+        s_status.last_receive_unix_us =
+            receive_clock->time_valid ? receive_clock->unix_us : 0;
+        s_status.last_transmit_unix_us =
+            transmit_clock->time_valid ? transmit_clock->unix_us : 0;
+        if (s_status.last_receive_to_transmit_valid) {
+            s_status.last_receive_to_transmit_us =
+                transmit_clock->unix_us - receive_clock->unix_us;
+        } else {
+            s_status.last_receive_to_transmit_us = 0;
+        }
+    }
+    portEXIT_CRITICAL(&s_status_lock);
 }
 
 static void ntp_task(void *arg)
@@ -147,15 +181,21 @@ static void ntp_task(void *arg)
                 continue;
             }
 
-            build_response(response, request, &receive_clock);
+            clock_snapshot_t transmit_clock =
+                build_response(response, request, &receive_clock);
             int sent = sendto(sock, response, sizeof(response), 0,
                               (struct sockaddr *)&source, source_length);
+            bool response_sent = false;
             if (sent < 0) {
                 ESP_LOGE(TAG, "sendto failed: errno %d", errno);
             } else if (sent != sizeof(response)) {
                 ESP_LOGE(TAG, "sendto sent only %d of %d bytes",
                          sent, NTP_PACKET_SIZE);
+            } else {
+                response_sent = true;
             }
+            record_request_result(&receive_clock, &transmit_clock,
+                                  response_sent);
         }
 
         if (close(sock) < 0) {
@@ -170,4 +210,14 @@ esp_err_t ntp_server_start(void)
     BaseType_t created =
         xTaskCreate(ntp_task, "ntp_server", 4096, NULL, 8, NULL);
     return created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+ntp_server_status_t ntp_server_status(void)
+{
+    ntp_server_status_t status;
+
+    portENTER_CRITICAL(&s_status_lock);
+    status = s_status;
+    portEXIT_CRITICAL(&s_status_lock);
+    return status;
 }
